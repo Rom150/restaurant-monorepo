@@ -1,3 +1,0 @@
-0000000000000000000000000000000000000000 bca6d2179679377876b1424bdfa53a301f123f2d Romain Duval <romainduval@macbook-air-de-romain.home> 1769117758 +0100	branch: Created from origin/main
-bca6d2179679377876b1424bdfa53a301f123f2d a945b1f2da739194de2981df44b6249b35373409 Romain Duval <romainduval@macbook-air-de-romain.home> 1769118314 +0100	commit: feat(import): add ImportPreview, API client and MercurialeTab backend integration
-a945b1f2da739194de2981df44b6249b35373409 f0064808b44b29071ca7cd6e3d43f8ba1ffe57d3 Romain Duval <romainduval@macbook-air-de-romain.home> 1769118330 +0100	commit: feat(import): FichesTechniquesTab backend parse integration
