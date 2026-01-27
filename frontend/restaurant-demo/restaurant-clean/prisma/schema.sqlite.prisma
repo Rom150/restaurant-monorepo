@@ -1,0 +1,171 @@
+// prisma/schema.prisma
+// Fichier complet à coller (remplace le contenu actuel de prisma/schema.prisma).
+// Attention : fais une sauvegarde git avant de remplacer le fichier.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              Int            @id @default(autoincrement())
+  email           String         @unique
+  name            String?
+  password        String
+  role            Role           @relation(fields: [roleId], references: [id])
+  roleId          Int
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id])
+  establishmentId Int?
+  sessions        Session[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model Role {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  users User[]
+}
+
+model Product {
+  id             Int      @id @default(autoincrement())
+  name           String
+  description    String?
+  price          Float
+  // Nouveaux champs utiles pour la fiche technique / inventaire
+  prixParDefaut  Float?
+  uniteParDefaut String?
+  densite        Float? // g/ml pour conversion masse <-> volume
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // relations (nouvelles)
+  prixs            Prix[]
+  ficheTechnique   FicheTechnique?
+  ficheIngredients FicheIngredient[] // produits utilisés comme ingrédient
+  stocks           Stock[]
+  mouvements       MouvementStock[]
+}
+
+model Establishment {
+  id       Int       @id @default(autoincrement())
+  name     String
+  users    User[]
+  sessions Session[]
+
+  // relations ajoutées
+  prixs      Prix[]
+  stocks     Stock[]
+  mouvements MouvementStock[]
+}
+
+model Session {
+  id              Int            @id @default(autoincrement())
+  user            User           @relation(fields: [userId], references: [id])
+  userId          Int
+  establishment   Establishment? @relation(fields: [establishmentId], references: [id])
+  establishmentId Int?
+  refreshToken    String
+  ip              String?
+  userAgent       String?
+  createdAt       DateTime       @default(now())
+  revokedAt       DateTime?
+  expiresAt       DateTime
+}
+
+//
+// Nouveaux modèles métiers (fiches techniques, prix, unités, stock)
+//
+
+model Prix {
+  id              Int            @id @default(autoincrement())
+  produit         Product        @relation(fields: [produitId], references: [id])
+  produitId       Int
+  etablissement   Establishment? @relation(fields: [etablissementId], references: [id])
+  etablissementId Int?
+  montant         Float
+  devise          String         @default("EUR")
+  valableDepuis   DateTime       @default(now())
+  valableJusqua   DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([produitId])
+  @@index([etablissementId])
+}
+
+model FicheTechnique {
+  id        Int               @id @default(autoincrement())
+  produit   Product           @relation(fields: [produitId], references: [id])
+  produitId Int               @unique
+  rendement Float             @default(1)
+  uniteRdt  String            @default("unit")
+  notes     String?
+  items     FicheIngredient[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model FicheIngredient {
+  id           Int            @id @default(autoincrement())
+  fiche        FicheTechnique @relation(fields: [ficheId], references: [id])
+  ficheId      Int
+  ingredient   Product        @relation(fields: [ingredientId], references: [id])
+  ingredientId Int
+  quantite     Float
+  unite        String
+  ordre        Int            @default(0)
+  notes        String?
+}
+
+model Unite {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique // ex: "g","kg","mg","L","ml","unit"
+  type      String // "mass" | "volume" | "count"
+  nom       String // libellé français ex: "gramme"
+  facteur   Float // facteur par rapport à l'unité de base (g ou ml). ex: kg -> 1000
+  precision Int? // nb décimales recommandées
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Stock {
+  id              Int            @id @default(autoincrement())
+  produit         Product        @relation(fields: [produitId], references: [id])
+  produitId       Int
+  etablissement   Establishment? @relation(fields: [etablissementId], references: [id])
+  etablissementId Int?
+  quantite        Float          @default(0)
+  unite           String
+  lastCountAt     DateTime?
+  updatedAt       DateTime       @updatedAt
+
+  @@index([produitId])
+  @@index([etablissementId])
+}
+
+model MouvementStock {
+  id              Int            @id @default(autoincrement())
+  produit         Product        @relation(fields: [produitId], references: [id])
+  produitId       Int
+  etablissement   Establishment? @relation(fields: [etablissementId], references: [id])
+  etablissementId Int?
+  type            MouvementType
+  quantite        Float
+  unite           String
+  raison          String?
+  referenceId     Int?
+  createdById     Int?
+  createdAt       DateTime       @default(now())
+}
+
+enum MouvementType {
+  ENTREE
+  SORTIE
+  AJUSTEMENT
+  TRANSFERT
+}
