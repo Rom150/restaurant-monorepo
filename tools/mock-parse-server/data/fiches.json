@@ -1,0 +1,16 @@
+[
+  {
+    "title": "test-fiche-final3",
+    "items": [
+      {
+        "name": "Lentilles",
+        "quantite": 300,
+        "unite": "g",
+        "prix": 0
+      }
+    ],
+    "notes": "ok3",
+    "id": 1769954524976,
+    "created_at": "2026-02-01T14:02:04.976Z"
+  }
+]

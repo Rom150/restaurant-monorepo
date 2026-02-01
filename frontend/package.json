@@ -15,12 +15,12 @@
     "lucide-react": "^0.562.0",
     "npm": "^11.7.0",
     "pdf-parse": "^2.4.5",
-    "pdfjs-dist": "^5.4.530",
+    "pdfjs-dist": "^3.4.120",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-scripts": "5.0.1",
     "run": "^1.5.0",
-    "tesseract.js": "^7.0.0",
+    "tesseract.js": "^2.1.5",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

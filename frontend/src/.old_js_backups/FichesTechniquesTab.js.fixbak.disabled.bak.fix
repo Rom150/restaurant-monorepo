@@ -1,0 +1,192 @@
+import React, { useEffect, useState } from 'react';
+import ImportPreview from '../components/ImportPreview';
+import { uploadParse } from '../utils/api';
+
+export default function FichesTechniquesTab({ fiches = [], setFiches = () => {} }) {
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ message: '', percent: 0 });
+  const [parsedForPreview, setParsedForPreview] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [list, setList] = useState(fiches || []);
+  const [selectedFileName, setSelectedFileName] = useState('aucun fichier sélectionné');
+
+  useEffect(() => {
+    const fetchFiches = async () => {
+      try {
+        const res = await fetch((process.env.REACT_APP_API_URL || '') + '/api/fiches');
+        if (res.ok) {
+          const j = await res.json();
+          setList(j.data || []);
+          setFiches(j.data || []);
+        }
+      } catch (err) {
+        console.warn('Could not fetch fiches', err);
+      }
+    };
+    fetchFiches();
+  }, []);
+
+  const finish = (e) => {
+    setImporting(false);
+    setImportProgress({ message: '', percent: 0 });
+    if (e && e.target) e.target.value = null;
+    setSelectedFileName('aucun fichier sélectionné');
+  };
+
+  const handleFileImport = async (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+    setSelectedFileName(file.name || 'fichier sélectionné');
+
+    const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+      alert('⚠️ Format non supporté. Utilisez PDF, JPG ou PNG');
+      finish(e);
+      return;
+    }
+
+    try {
+      setImporting(true);
+      setImportProgress({ message: 'Envoi du fichier...', percent: 0.05 });
+      const parsed = await uploadParse(file);
+      setImportProgress({ message: 'Analyse terminée', percent: 1.0 });
+      setParsedForPreview(parsed);
+      setShowPreview(true);
+      finish(e);
+    } catch (err) {
+      console.error('Erreur import:', err);
+      alert('Erreur lors de l\'import : ' + ((err && err.message) || String(err)));
+      finish(e);
+    }
+  };
+
+  const commitFicheToServer = async (payload) => {
+    try {
+      setImporting(true);
+      setImportProgress({ message: 'Enregistrement fiche...', percent: 0.1 });
+      const base = process.env.REACT_APP_API_URL || '';
+      const res = await fetch(base + '/api/fiches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Erreur serveur');
+      }
+      const j = await res.json();
+      const ref = await fetch(base + '/api/fiches');
+      const data = (await ref.json()).data || [];
+      setList(data);
+      setFiches(data);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      return j;
+    } catch (err) {
+      console.error('Erreur commit fiche:', err);
+      throw err;
+    } finally {
+      setImporting(false);
+      setImportProgress({ message: '', percent: 0 });
+    }
+  };
+
+  const calcCost = (fiche) => {
+    if (!fiche || !fiche.items) return 0;
+    let total = 0;
+    for (const it of fiche.items) {
+      const qty = Number(it.quantite || 0);
+      const price = Number((it.ingredient && it.ingredient.price) || it.prix || 0);
+      total += qty * price;
+    }
+    return total;
+  };
+
+  return (
+    <div style={{ padding: 16 }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <h2 style={{ margin: 0 }}>Fiches techniques</h2>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <label className="mr-btn-file" style={{ cursor: 'pointer' }}>
+            <input type="file" accept=".pdf,image/*" capture="environment" onChange={handleFileImport} style={{ display: 'none' }} />
+            <span className="mr-btn-primary">Choisir le fichier / prendre photo</span>
+          </label>
+          <div style={{ fontSize: 13, color: '#666' }}>{selectedFileName}</div>
+        </div>
+      </header>
+
+      {importing && (
+        <div style={{ marginTop: 12 }}>
+          <div>{importProgress.message}</div>
+          <div style={{ width: '100%', height: 8, background: '#eee', borderRadius: 4, marginTop: 6 }}>
+            <div
+              style={{
+                width: `${Math.min(100, (importProgress.percent || 0) * 100)}%`,
+                height: 8,
+                background: '#4caf50',
+                borderRadius: 4,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {showSuccess && <div style={{ marginTop: 12, color: 'green' }}>Opération réussie ✅</div>}
+
+      <section style={{ marginTop: 16 }}>
+        <h3>Liste des fiches — {list.length} items</h3>
+        <div style={{ marginTop: 8 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', background: '#fafafa' }}>
+                <th style={{ padding: 8 }}>Titre</th>
+                <th style={{ padding: 8, width: 120 }}>Rendement</th>
+                <th style={{ padding: 8, width: 160 }}>Coût total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((f) => (
+                <tr key={f.id} style={{ borderTop: '1px solid #eee' }}>
+                  <td style={{ padding: 10 }}>{f.produit ? f.produit.name : `Fiche ${f.id}`}</td>
+                  <td style={{ padding: 10 }}>{f.rendement || 1} {f.uniteRdt || ''}</td>
+                  <td style={{ padding: 10 }}>{(calcCost(f) || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {showPreview && parsedForPreview && (
+        <div style={{ marginTop: 16 }}>
+          <ImportPreview
+            data={parsedForPreview}
+            onClose={() => setShowPreview(false)}
+            onCommit={async (data) => {
+              try {
+                const payload = {
+                  titre: data.titre || data.nom || data.name || 'Fiche',
+                  rendement: data.rendement || 1,
+                  uniteRdt: data.uniteRdt || 'unit',
+                  notes: data.notes || '',
+                  photoUrl: data.photoUrl || null,
+                  items: Array.isArray(data.items) ? data.items.map(it => ({
+                    name: it.name || it.nom || '',
+                    quantite: Number(it.quantite || it.qty || 0),
+                    unite: it.unite || it.unit || 'unit',
+                    prix: Number(it.prix || it.price || 0),
+                  })) : []
+                };
+                await commitFicheToServer(payload);
+                setShowPreview(false);
+              } catch (err) {
+                console.error("Erreur lors de la création de la fiche :", ((err && err.message) || String(err)));
+              }
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

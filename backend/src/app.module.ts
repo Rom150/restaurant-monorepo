@@ -1,3 +1,4 @@
+import { UploadModule } from './upload/upload.module';
 // src/app.module.ts
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
@@ -12,6 +13,7 @@ import { UnitesModule } from './unites/unites.module';
 
 @Module({
   imports: [
+    UploadModule,
     // Prisma en premier si d'autres modules en dépendent
     PrismaModule,
     UsersModule,

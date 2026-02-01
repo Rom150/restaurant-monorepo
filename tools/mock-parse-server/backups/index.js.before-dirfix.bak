@@ -1,0 +1,75 @@
+const express = require('express');
+const multer = require('multer');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+
+const upload = multer({ dest: 'uploads/' });
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+/**
+ * POST /parse
+ */
+app.post('/parse', upload.single('file'), (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'no file' });
+  const name = file.originalname || file.filename;
+  const parsed = {
+    meta: { fileName: name, source: 'mock' },
+    items: [
+      { name: 'Farine', quantite: 10, unite: 'kg', prix: 2 },
+      { name: 'Sel', quantite: 1, unite: 'kg', prix: 0.5 }
+    ]
+  };
+  fs.unlink(file.path, () => {});
+  return res.json(parsed);
+});
+
+/**
+ * POST /api/fiches
+ * simple file-backed storage at tools/mock-parse-server/data/fiches.json
+ */
+const fichesFile = 'data/fiches.json';
+if (!fs.existsSync('data')) fs.mkdirSync('data');
+
+app.post('/api/fiches', (req, res) => {
+  const fiche = req.body;
+  if (!fiche) return res.status(400).json({ error: 'no fiche in body' });
+  fiche.id = fiche.id || Date.now();
+  fiche.created_at = fiche.created_at || new Date().toISOString();
+
+  let arr = [];
+  try {
+    if (fs.existsSync(fichesFile)) {
+      arr = JSON.parse(fs.readFileSync(fichesFile, 'utf8') || '[]');
+    }
+  } catch (e) {
+    arr = [];
+  }
+
+  arr.unshift(fiche);
+  try {
+    fs.writeFileSync(fichesFile, JSON.stringify(arr, null, 2), 'utf8');
+  } catch (e) {
+    console.error('write fiches error', e);
+    return res.status(500).json({ error: 'cannot save' });
+  }
+  return res.json({ data: fiche });
+});
+
+/**
+ * GET /api/fiches - helper to list saved fiches
+ */
+app.get('/api/fiches', (req, res) => {
+  try {
+    const arr = fs.existsSync(fichesFile) ? JSON.parse(fs.readFileSync(fichesFile, 'utf8') || '[]') : [];
+    return res.json({ data: arr });
+  } catch (e) {
+    return res.status(500).json({ error: 'cannot read' });
+  }
+});
+
+const port = process.env.PORT || 9000;
+app.listen(port, () => console.log('Mock parse server running on http://localhost:' + port));

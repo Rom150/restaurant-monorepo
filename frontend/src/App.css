@@ -2509,3 +2509,41 @@ label.btn-secondary:hover {
     font-size: 24px;
   }
 }
+/* --- Mercuriale table styles (added) --- */
+.mercuriale-list-wrapper { background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); padding: 6px; }
+.mercuriale-table thead th { background: #fafafa; font-size: 13px; color: #333; border-bottom: 1px solid #e6e6e6; }
+.mercuriale-table tbody tr:nth-child(odd) { background: #ffffff; }
+.mercuriale-table tbody tr:nth-child(even) { background: #fbfbfd; }
+.mercuriale-table td, .mercuriale-table th { padding: 8px 12px; vertical-align: middle; }
+
+/* --- Mercuriale UI tweaks --- */
+.mr-btn-file { cursor: pointer; display: inline-block; }
+.mr-btn-primary {
+  display: inline-block;
+  background: #2b8aef;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(43,138,239,0.18);
+}
+.mr-photo-btn {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+.mr-photo-btn:hover { background: #f7f9fb; }
+.mr-photo-remove {
+  border-color: #f5c2c2;
+  color: #c00;
+}
+.mr-photo-remove:hover { background: #fff0f0; }
+
+/* enlarge table actions on small screens */
+@media (max-width: 800px) {
+  .mr-btn-primary { padding: 12px 18px; font-size: 16px; }
+  .mr-photo-btn { padding: 10px 12px; font-size: 14px; }
+}

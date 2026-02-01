@@ -1,0 +1,364 @@
+/* frontend/src/components/MercurialeTab.js */
+import React, { useState } from 'react';
+import ImportPreview from '../components/ImportPreview';
+import { uploadParse, uploadCommit } from '../utils/api';
+import { extractTextFromFile, parseIngredientsFromText } from '../utils/mercurialeImport';
+
+/**
+ * MercurialeTab - now supports taking a photo of a facture (image).
+ * - Images are OCR'd client-side via extractTextFromFile + parseIngredientsFromText
+ * - PDFs are sent to backend via uploadParse when REACT_APP_API_URL is set
+ * - file input includes capture="environment" to open camera on mobile devices
+ */
+
+export default function MercurialeTab({ ingredients = [], setIngredients = () => {} }) {
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ message: '', percent: 0 });
+  const [parsedForPreview, setParsedForPreview] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState('aucun fichier sélectionné');
+
+  const cleanName = (s) => {
+    if (!s) return '';
+    let name = String(s).trim();
+    name = name.replace(/\s+[0-9]+(?:[.,][0-9]{1,2})\s*€\s*$/i, '');
+    name = name.replace(/\s+(kg|g|l|ml|cl|botte|bte|bot|pcs|pièce|piece|unité|unite|bouteille|paquet|sachet|portion|lot)\.?\s*$/i, '');
+    name = name.replace(/\s*[-���—:]+\s*$/g, '');
+    name = name.replace(/[^A-Za-z0-9À-ÖØ-öø-ÿ\s'.,-]/g, '');
+    name = name.replace(/\s+/g, ' ').trim();
+    return name.toLowerCase();
+  };
+
+  const weightedAverage = (qty1, price1, qty2, price2) => {
+    const q1 = Number(qty1 || 0);
+    const q2 = Number(qty2 || 0);
+    const p1 = Number(price1 || 0);
+    const p2 = Number(price2 || 0);
+    const total = q1 + q2;
+    if (total <= 0) return q2 ? p2 : p1;
+    return (q1 * p1 + q2 * p2) / total;
+  };
+
+  const updateIngredient = (key, patch) => {
+    setIngredients(prev => {
+      const map = new Map(prev.map(i => [i.id ?? cleanName(i.name ?? i.nom), { ...i }]));
+      const existing = map.get(key);
+      if (existing) {
+        map.set(key, { ...existing, ...patch });
+      } else {
+        map.set(key, { id: Date.now() + Math.random(), ...patch });
+      }
+      return Array.from(map.values());
+    });
+  };
+
+  const handlePhotoPicker = (ingredient) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const key = ingredient.id ?? cleanName(ingredient.name ?? ingredient.nom);
+        updateIngredient(key, { photo: dataUrl });
+      };
+      reader.onerror = (err) => {
+        console.error('Erreur lecture image', err);
+        alert('Erreur lors de la lecture du fichier image.');
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  const handleRemovePhoto = (ingredient) => {
+    const key = ingredient.id ?? cleanName(ingredient.name ?? ingredient.nom);
+    updateIngredient(key, { photo: null });
+  };
+
+  // Global photo add (prompt product, then picker)
+  const handleGlobalPhotoAdd = async () => {
+    if (!Array.isArray(ingredients) || ingredients.length === 0) {
+      alert('Aucun ingrédient disponible. Importez d\'abord une mercuriale ou ajoutez des ingrédients.');
+      return;
+    }
+    const raw = window.prompt('Nom du produit (ex: Huile d\'olive) pour associer la photo :');
+    if (!raw) return;
+    const key = cleanName(raw);
+
+    let candidate = ingredients.find(i => cleanName(i.name || i.nom) === key);
+    if (!candidate) candidate = ingredients.find(i => cleanName(i.name || i.nom).startsWith(key));
+    if (!candidate) candidate = ingredients.find(i => cleanName(i.name || i.nom).includes(key));
+    if (!candidate) {
+      alert('Aucun produit correspondant trouvé.');
+      return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const candidateKey = candidate.id ?? cleanName(candidate.name || candidate.nom);
+        updateIngredient(candidateKey, { photo: dataUrl });
+        alert(`Photo ajoutée pour "${candidate.name || candidate.nom}"`);
+      };
+      reader.onerror = (err) => {
+        console.error('Erreur lecture image', err);
+        alert('Erreur lors de la lecture du fichier image.');
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  /**
+   * handleFileImport:
+   * - if image => use client-side OCR (extractTextFromFile + parseIngredientsFromText)
+   * - if pdf => prefer backend uploadParse when REACT_APP_API_URL is set, otherwise fallback to client-side PDF extraction
+   */
+  const handleFileImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFileName(file.name || 'fichier sélectionné');
+
+    const isImage = file.type && file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf' || (file.name && file.name.toLowerCase().endsWith('.pdf'));
+
+    try {
+      setImporting(true);
+      setImportProgress({ message: isImage ? 'Analyse image (OCR)...' : 'Upload...', percent: 0.05 });
+
+      if (isImage) {
+        // OCR client-side (Tesseract)
+        const text = await extractTextFromFile(file, (msg, p) => setImportProgress({ message: msg, percent: p }));
+        const parsedItems = parseIngredientsFromText(text);
+        const parsedObj = {
+          items: parsedItems.map(it => ({
+            name: it.nom || it.name || '',
+            quantite: it.quantite || it.qty || 0,
+            unite: it.unite || it.unit || 'unit',
+            prix: it.prix || it.price || 0,
+            raw: it.raw || '',
+            confidence: it.confidence || it.conf || 0.0,
+          })),
+          meta: {
+            fileName: file.name,
+            lineCount: parsedItems.length,
+            source: 'ocr-client',
+          },
+        };
+        setParsedForPreview(parsedObj);
+        setShowPreview(true);
+        setImportProgress({ message: '', percent: 0 });
+        return;
+      }
+
+      if (isPdf && process.env.REACT_APP_API_URL) {
+        // use backend PDF parser if available
+        const parsed = await uploadParse(file);
+        setParsedForPreview(parsed);
+        setShowPreview(true);
+        setImportProgress({ message: '', percent: 0 });
+        return;
+      }
+
+      // Fallback: try client-side extraction for PDF (via mercurialeImport)
+      if (isPdf) {
+        const text = await extractTextFromFile(file, (msg, p) => setImportProgress({ message: msg, percent: p }));
+        const parsedItems = parseIngredientsFromText(text);
+        const parsedObj = {
+          items: parsedItems.map(it => ({
+            name: it.nom || it.name || '',
+            quantite: it.quantite || it.qty || 0,
+            unite: it.unite || it.unit || 'unit',
+            prix: it.prix || it.price || 0,
+            raw: it.raw || '',
+            confidence: it.confidence || it.conf || 0.0,
+          })),
+          meta: {
+            fileName: file.name,
+            lineCount: parsedItems.length,
+            source: 'pdf-client',
+          },
+        };
+        setParsedForPreview(parsedObj);
+        setShowPreview(true);
+        setImportProgress({ message: '', percent: 0 });
+        return;
+      }
+
+      alert('Format de fichier non supporté.');
+    } catch (err) {
+      console.error('Erreur import:', err);
+      alert('Erreur lors de l\'import : ' + ((err && err.message) || err));
+    } finally {
+      setImporting(false);
+      setImportProgress({ message: '', percent: 0 });
+      e.target.value = null;
+    }
+  };
+
+  return (
+    <div style={{ padding: 16 }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <h2 style={{ margin: 0 }}>Mercuriale</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label className="mr-btn-file">
+            {/* capture="environment" suggests camera on mobile */}
+            <input type="file" accept=".pdf,image/*" capture="environment" onChange={handleFileImport} style={{ display: 'none' }} />
+            <span className="mr-btn-primary">Choisir le fichier</span>
+          </label>
+
+          <button className="mr-btn-primary" onClick={handleGlobalPhotoAdd} style={{ background: '#4CAF50' }}>
+            Ajouter photo
+          </button>
+
+          <div style={{ fontSize: 13, color: '#666' }}>{selectedFileName}</div>
+        </div>
+      </header>
+
+      {importing && (
+        <div style={{ marginTop: 12 }}>
+          <div>{importProgress.message}</div>
+          <div style={{ width: '100%', height: 8, background: '#eee', borderRadius: 4, marginTop: 6 }}>
+            <div
+              style={{
+                width: `${Math.min(100, (importProgress.percent || 0) * 100)}%`,
+                height: '100%',
+                background: '#2b8aef',
+                borderRadius: 4,
+                transition: 'width 200ms',
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {showSuccess && <div style={{ marginTop: 12, color: 'green' }}>Import ajouté avec succès ✅</div>}
+
+      <section style={{ marginTop: 16 }}>
+        <h3>Liste (aperçu) — {ingredients.length} lignes</h3>
+
+        <div className="mercuriale-list-wrapper" style={{ overflowX: 'auto', marginTop: 8 }}>
+          <table className="mercuriale-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '8px 12px' }}>Nom</th>
+                <th style={{ width: 120, textAlign: 'right', padding: '8px 12px' }}>Quantité</th>
+                <th style={{ width: 100, textAlign: 'left', padding: '8px 12px' }}>Unité</th>
+                <th style={{ width: 140, textAlign: 'right', padding: '8px 12px' }}>Prix</th>
+                <th style={{ width: 160, textAlign: 'center', padding: '8px 12px' }}>Photo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ingredients.slice(0, 200).map((m) => (
+                <tr key={m.id || Math.random()} style={{ borderTop: '1px solid #eee' }}>
+                  <td style={{ padding: '10px 12px' }}>
+                    <div style={{ fontWeight: 600 }}>{m.name || m.nom || ''}</div>
+                    <div style={{ fontSize: 12, color: '#666' }}>{m.allergenes ? (m.allergenes.join(', ') || '') : ''}</div>
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{m.quantite ?? ''}</td>
+                  <td style={{ padding: '10px 12px' }}>{m.unite || ''}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                    {typeof m.prix === 'number' ? m.prix.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : (m.prix || '')}
+                  </td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    {m.photo ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center' }}>
+                        <img
+                          src={m.photo}
+                          alt="photo"
+                          onClick={() => handlePhotoPicker(m)}
+                          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid #ddd', cursor: 'pointer' }}
+                          title="Cliquer pour changer la photo"
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="mr-photo-btn" onClick={() => handlePhotoPicker(m)}>Changer</button>
+                          <button className="mr-photo-btn mr-photo-remove" onClick={() => handleRemovePhoto(m)}>Supprimer</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="mr-photo-btn" onClick={() => handlePhotoPicker(m)}>Ajouter photo</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {showPreview && parsedForPreview && (
+        <ImportPreview
+          parsed={parsedForPreview}
+          onClose={() => setShowPreview(false)}
+          onCommit={async (payload) => {
+            try {
+              setImporting(true);
+              const res = await uploadCommit({ ...payload, type: 'mercuiale' });
+              const items = Array.isArray(payload.items) ? payload.items : [];
+              const newEntries = items.map((it) => ({
+                id: Date.now() + Math.random(),
+                name: it.name || it.nom || '',
+                quantite: Number(it.quantite || it.quantity || 0),
+                unite: it.unite || it.unit || 'unit',
+                prix: Number(it.prix || it.price || 0),
+                _serverResult: (res && res.results) ? res.results.find(r => r.name === (it.name || it.nom)) : undefined,
+              }));
+
+              const map = new Map();
+              for (const ing of ingredients) {
+                map.set(cleanName(ing.name || ing.nom), { ...ing });
+              }
+              for (const ne of newEntries) {
+                const key = cleanName(ne.name);
+                if (!key) continue;
+                if (map.has(key)) {
+                  const existing = map.get(key);
+                  const exQty = Number(existing.quantite || existing.qty || 0);
+                  const exPrice = Number(existing.prix || existing.price || 0);
+                  const totQty = exQty + (ne.quantite || 0);
+                  const newPrice = weightedAverage(exQty, exPrice, ne.quantite || 0, ne.prix || 0);
+                  existing.quantite = totQty;
+                  existing.prix = Number(newPrice.toFixed(2));
+                  if (!existing.name && ne.name) existing.name = ne.name;
+                  map.set(key, existing);
+                } else {
+                  map.set(key, {
+                    id: ne.id,
+                    name: ne.name,
+                    quantite: ne.quantite,
+                    unite: ne.unite,
+                    prix: ne.prix,
+                    _serverResult: ne._serverResult,
+                  });
+                }
+              }
+
+              const merged = Array.from(map.values());
+              setIngredients(merged);
+
+              setShowSuccess(true);
+              setTimeout(() => setShowSuccess(false), 3000);
+              setShowPreview(false);
+            } catch (err) {
+              console.error(err);
+              alert('Erreur lors du commit : ' + ((err && err.message) || err));
+            } finally {
+              setImporting(false);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}

@@ -14,7 +14,7 @@ const CaisseTab = ({ fiches, ingredients, setIngredients }) => {
     const manquants = [];
     
     fiche.ingredients.forEach(ing => {
-      const stockDispo = ingredients.find(i => i.id === ing.id)?.stockActuel || 0;
+      const stockDispo = (ingredients.find(i => i.id === ing.id) && ingredients.find(i => i.id === ing.id).stockActuel) || 0;
       const necessaire = ing.quantite || 0;
       
       if (stockDispo < necessaire) {
@@ -62,7 +62,7 @@ const CaisseTab = ({ fiches, ingredients, setIngredients }) => {
           `• ${m.nom}: ${m.disponible.toFixed(2)} dispo, ${m.necessaire.toFixed(2)} nécessaire (manque ${m.manque.toFixed(2)})`
         ).join('\n');
       
-      alert(message);
+      console.error(message);
       return;
     }
 
@@ -97,14 +97,14 @@ const CaisseTab = ({ fiches, ingredients, setIngredients }) => {
    */
   const enregistrerVente = () => {
     if (quantiteVente <= 0) {
-      alert('Veuillez saisir une quantité valide.');
+      console.error('Veuillez saisir une quantité valide.');
       return;
     }
 
     // Vérifier à nouveau le stock avec la quantité demandée
     const verification = verifierStockAvecQuantite(selectedFiche, quantiteVente);
     if (!verification.possible) {
-      alert('Stock insuffisant pour cette quantité.');
+      console.error('Stock insuffisant pour cette quantité.');
       return;
     }
 
@@ -169,10 +169,10 @@ const CaisseTab = ({ fiches, ingredients, setIngredients }) => {
 
     if (alertes.length > 0) {
       setTimeout(() => {
-        alert(`✅ Vente enregistrée !\n\n⚠️ ALERTES STOCK:\n\n${alertes.join('\n')}`);
+        console.error(`✅ Vente enregistrée !\n\n⚠️ ALERTES STOCK:\n\n${alertes.join('\n')}`);
       }, 500);
     } else {
-      alert(`✅ Vente enregistrée !\n\n${selectedFiche.nom} x${quantiteVente}\nMontant: ${montantTotal.toFixed(2)}€`);
+      console.error(`✅ Vente enregistrée !\n\n${selectedFiche.nom} x${quantiteVente}\nMontant: ${montantTotal.toFixed(2)}€`);
     }
 
     setShowVenteModal(false);
@@ -185,7 +185,7 @@ const CaisseTab = ({ fiches, ingredients, setIngredients }) => {
     const manquants = [];
     
     fiche.ingredients.forEach(ing => {
-      const stockDispo = ingredients.find(i => i.id === ing.id)?.stockActuel || 0;
+      const stockDispo = (ingredients.find(i => i.id === ing.id) && ingredients.find(i => i.id === ing.id).stockActuel) || 0;
       const necessaire = (ing.quantite || 0) * quantite;
       
       if (stockDispo < necessaire) {
@@ -370,7 +370,7 @@ const CaisseTab = ({ fiches, ingredients, setIngredients }) => {
               <h4>Déductions de stock:</h4>
               {selectedFiche.ingredients.map(ing => {
                 const qte = ing.quantite * quantiteVente;
-                const stockActuel = ingredients.find(i => i.id === ing.id)?.stockActuel || 0;
+                const stockActuel = (ingredients.find(i => i.id === ing.id) && ingredients.find(i => i.id === ing.id).stockActuel) || 0;
                 const nouveauStock = stockActuel - qte;
                 
                 return (

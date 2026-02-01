@@ -84,7 +84,7 @@ const importDemoData = () => {
     setIngredients(demoIngredients);
     setFiches(demoFiches);
     
-    alert('✅ Données importées !');
+    console.error('✅ Données importées !');
     
     // Recharger pour être sûr
     setTimeout(() => {
@@ -93,13 +93,13 @@ const importDemoData = () => {
   }
 };
     setIngredients(ingredientsDemo);
-    alert('✅ 19 ingrédients importés ! Vous pouvez maintenant créer des fiches.');
+    console.error('✅ 19 ingrédients importés ! Vous pouvez maintenant créer des fiches.');
   };
 const importDemoData = () => {
   if (window.confirm('Importer les données de démonstration ?')) {
     setIngredients(demoIngredients);
     setFiches(demoFiches);
-    alert('✅ Données importées !');
+    console.error('✅ Données importées !');
   }
 };
   return (

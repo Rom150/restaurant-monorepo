@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# build
+dist/
+build/
+frontend/build/
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs / tmp
+mock-parse-server.log
+mock-parse-server.pid
+frontend-build.log
+tmp-pdfs/
+backups_after_*
+.backups*
+.mr_backups/
+.mr_backups_alert_patch/
+
+# Docker
+docker-compose.yml
+
+# IDE
+.vscode/
+.idea/

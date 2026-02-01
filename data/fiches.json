@@ -1,0 +1,44 @@
+[
+  {
+    "title": "test-fiche-final",
+    "items": [
+      {
+        "name": "Riz",
+        "quantite": 500,
+        "unite": "g",
+        "prix": 0
+      }
+    ],
+    "notes": "ok",
+    "id": 1769953714584,
+    "created_at": "2026-02-01T13:48:34.584Z"
+  },
+  {
+    "title": "test-fiche-curl-2",
+    "items": [
+      {
+        "name": "Penne",
+        "quantite": 200,
+        "unite": "g",
+        "prix": 0
+      }
+    ],
+    "notes": "demo2",
+    "id": 1769953518867,
+    "created_at": "2026-02-01T13:45:18.867Z"
+  },
+  {
+    "title": "test-fiche-cmd",
+    "items": [
+      {
+        "name": "Spaghetti",
+        "quantite": 100,
+        "unite": "g",
+        "prix": 0
+      }
+    ],
+    "notes": "demo",
+    "id": 1769953028084,
+    "created_at": "2026-02-01T13:37:08.084Z"
+  }
+]

@@ -68,7 +68,7 @@ const InventaireTab = ({ ingredients, setIngredients, fiches }) => {
    */
   const enregistrerEntree = () => {
     if (!entreeForm.quantite || parseFloat(entreeForm.quantite) <= 0) {
-      alert('Veuillez saisir une quantité valide.');
+      console.error('Veuillez saisir une quantité valide.');
       return;
     }
 
@@ -151,7 +151,7 @@ const InventaireTab = ({ ingredients, setIngredients, fiches }) => {
     const liste = genererListeCourses();
     
     if (liste.length === 0) {
-      alert('✅ Tous les stocks sont OK ! Pas besoin de commander.');
+      console.error('✅ Tous les stocks sont OK ! Pas besoin de commander.');
       return;
     }
 
@@ -179,7 +179,7 @@ const InventaireTab = ({ ingredients, setIngredients, fiches }) => {
     a.click();
     URL.revokeObjectURL(url);
 
-    alert(`📋 Liste de courses exportée !\n\n${liste.length} produit(s) à commander\nCoût estimé: ${coutTotal.toFixed(2)}€`);
+    console.error(`📋 Liste de courses exportée !\n\n${liste.length} produit(s) à commander\nCoût estimé: ${coutTotal.toFixed(2)}€`);
   };
 
   /**
@@ -250,7 +250,7 @@ const InventaireTab = ({ ingredients, setIngredients, fiches }) => {
             <ShoppingCart size={18} />
             Liste de courses
           </button>
-          <button className="btn-secondary" onClick={() => alert('Fonction en développement')}>
+          <button className="btn-secondary" onClick={() => console.error('Fonction en développement')}>
             <Download size={18} />
             Export inventaire
           </button>
@@ -423,11 +423,11 @@ const ConfigModal = ({ ingredient, onSave, onClose }) => {
 
   const handleSave = () => {
     if (config.stockCritique >= config.stockMin) {
-      alert('Le seuil critique doit être inférieur au seuil minimum.');
+      console.error('Le seuil critique doit être inférieur au seuil minimum.');
       return;
     }
     if (config.stockMin >= config.stockMax) {
-      alert('Le seuil minimum doit être inférieur au stock maximum.');
+      console.error('Le seuil minimum doit être inférieur au stock maximum.');
       return;
     }
     onSave(config);

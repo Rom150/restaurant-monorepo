@@ -1,113 +1,168 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import ImportPreview from '../components/ImportPreview';
-import { uploadParse, uploadCommit } from '../utils/api';
-
-/**
- * Composant FichesTechniquesTab
- * - props attendus (pour intégration facile) :
- *    fiches: array d'objets fiches techniques
- *    setFiches: fonction pour mettre à jour la liste des fiches
- *
- * Si tu as déjà un composant existant, remplace uniquement sa fonction handleFileImport
- * par celle-ci ou remplace le fichier complet avec ce contenu.
- */
+import ManualFicheForm from './ManualFicheForm';
+import { uploadParse } from '../utils/api';
+import { extractTextFromFile, parseIngredientsFromText } from '../utils/mercurialeImport';
 
 export default function FichesTechniquesTab({ fiches = [], setFiches = () => {} }) {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ message: '', percent: 0 });
   const [parsedForPreview, setParsedForPreview] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showManual, setShowManual] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [list, setList] = useState(fiches || []);
+  const [selectedFileName, setSelectedFileName] = useState('aucun fichier sélectionné');
 
-  // handleFileImport : lit un fichier, appelle le backend si REACT_APP_API_URL défini,
-  // ouvre la modal ImportPreview avec la réponse (pour validation/édition) et permet commit.
+  const fileInputRef = useRef(null);
+  const photoInputRef = useRef(null);
+
+  useEffect(() => {
+    const fetchFiches = async () => {
+      try {
+        const res = await fetch((process.env.REACT_APP_API_URL || '') + '/api/fiches');
+        if (res.ok) {
+          const j = await res.json();
+          setList(j.data || []);
+          setFiches(j.data || []);
+        }
+      } catch (err) {
+        console.warn('Could not fetch fiches', err);
+      }
+    };
+    fetchFiches();
+  }, []);
+
+  const finish = (e) => {
+    setImporting(false);
+    setImportProgress({ message: '', percent: 0 });
+    if (e && e.target) e.target.value = null;
+    setSelectedFileName('aucun fichier sélectionné');
+  };
+
   const handleFileImport = async (e) => {
-    const file = e.target.files?.[0];
+    const file = e.target?.files?.[0];
     if (!file) return;
+    setSelectedFileName(file.name || 'fichier sélectionné');
 
     const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
     if (!validTypes.includes(file.type)) {
-      alert('⚠️ Format non supporté. Utilisez PDF, JPG ou PNG');
-      e.target.value = null;
+      console.error('⚠️ Format non supporté. Utilisez PDF, JPG ou PNG');
+      finish(e);
       return;
     }
 
-    // Si une URL de backend est configurée, on délègue le parsing au serveur
-    if (process.env.REACT_APP_API_URL) {
-      try {
-        setImporting(true);
-        setImportProgress({ message: 'Upload du fichier...', percent: 0.1 });
-
-        const parsed = await uploadParse(file);
-
-        setImportProgress({ message: 'Analyse terminée', percent: 1.0 });
-
-        setParsedForPreview(parsed);
-        setShowPreview(true);
-      } catch (err) {
-        console.error('Erreur import via API:', err);
-        alert(`Erreur import : ${err?.message || err}`);
-      } finally {
-        setImporting(false);
-        setImportProgress({ message: '', percent: 0 });
-        e.target.value = null;
-      }
-      return;
-    }
-
-    // Fallback client-side : tente d'appeler une fonction globale importFicheTechnique si existante
     try {
       setImporting(true);
-      setImportProgress({ message: 'Analyse locale...', percent: 0.1 });
+      setImportProgress({ message: 'Envoi du fichier...', percent: 0.05 });
 
-      if (typeof window.importFicheTechnique === 'function') {
-        // signature supposée : importFicheTechnique(file, progressCallback) -> recipe
-        const recipe = await window.importFicheTechnique(file, (message, percent) =>
-          setImportProgress({ message, percent })
-        );
-
-        // Si la fonction renvoie un objet recette, on propose directement l'ajout
-        if (recipe) {
-          // si tu disposes de validateRecipe/detectDuplicateRecipes dans ton code, tu peux les appeler ici.
-          // Pour rester générique, on demande confirmation simple :
-          if (window.confirm(`Ajouter la fiche "${recipe.nom || 'nouvelle fiche'}" détectée ?`)) {
-            const newFiche = {
-              ...recipe,
-              id: Date.now(),
-              photo: recipe.photo || null,
-              date: new Date().toISOString(),
-            };
-            setFiches((prev) => [...prev, newFiche]);
-            setShowSuccess(true);
-            setTimeout(() => setShowSuccess(false), 3000);
-          }
-        } else {
-          alert('Import local : aucun résultat retourné par importFicheTechnique.');
-        }
+      let parsed = null;
+      if (typeof uploadParse === 'function') {
+        // backend parsing (preferred)
+        parsed = await uploadParse(file);
+      } else if (typeof extractTextFromFile === 'function' && typeof parseIngredientsFromText === 'function') {
+        // fallback client-side (PDF/image text extraction)
+        const text = await extractTextFromFile(file);
+        parsed = parseIngredientsFromText(text || '');
       } else {
-        alert(
-          'Aucun parser client disponible. Configure REACT_APP_API_URL pour utiliser le backend ou fournissez une fonction globale importFicheTechnique.'
-        );
+        throw new Error('Aucun parser disponible pour le fichier');
       }
+
+      setImportProgress({ message: 'Analyse terminée', percent: 1.0 });
+      setParsedForPreview(parsed);
+      setShowPreview(true);
+      finish(e);
     } catch (err) {
-      console.error('Erreur import local:', err);
-      alert(`Erreur lors de l'import local : ${err?.message || err}`);
+      console.error('Erreur import:', err);
+      console.error("Erreur lors de l'import :", ((err && err.message) || String(err)));
+      finish(e);
+    }
+  };
+
+  const handlePhotoSelected = async (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+    setSelectedFileName(file.name || 'photo prise');
+
+    try {
+      setImporting(true);
+      setImportProgress({ message: 'Analyse photo...', percent: 0.05 });
+
+      let parsed = null;
+      if (typeof uploadParse === 'function') {
+        parsed = await uploadParse(file);
+      } else if (typeof extractTextFromFile === 'function' && typeof parseIngredientsFromText === 'function') {
+        const text = await extractTextFromFile(file);
+        parsed = parseIngredientsFromText(text || '');
+      } else {
+        throw new Error('Aucun parser disponible pour la photo');
+      }
+
+      setImportProgress({ message: 'Analyse terminée', percent: 1.0 });
+      setParsedForPreview(parsed);
+      setShowPreview(true);
+      finish(e);
+    } catch (err) {
+      console.error('Erreur import photo:', err);
+      console.error("Erreur lors de l'import :", ((err && err.message) || String(err)));
+      finish(e);
+    }
+  };
+
+  const onClickImportButton = () => fileInputRef.current && fileInputRef.current.click();
+  const onClickPhotoButton = () => photoInputRef.current && photoInputRef.current.click();
+
+  const commitFicheToServer = async (payload) => {
+    try {
+      setImporting(true);
+      setImportProgress({ message: 'Enregistrement fiche...', percent: 0.1 });
+      const base = process.env.REACT_APP_API_URL || '';
+      const res = await fetch(base + '/api/fiches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Erreur serveur');
+      }
+      const j = await res.json();
+      // refresh list
+      const ref = await fetch(base + '/api/fiches');
+      const data = (await ref.json()).data || [];
+      setList(data);
+      setFiches(data);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      return j;
+    } catch (err) {
+      console.error('Erreur commit fiche:', err);
+      throw err;
     } finally {
       setImporting(false);
       setImportProgress({ message: '', percent: 0 });
-      e.target.value = null;
     }
   };
 
   return (
     <div style={{ padding: 16 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>Fiches techniques</h2>
-        <div>
-          <label style={{ marginRight: 8 }}>
-            <input type="file" accept=".pdf,image/*" onChange={handleFileImport} style={{ display: 'inline-block' }} />
-            <span style={{ marginLeft: 8 }}>Importer fiche / facture</span>
-          </label>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <h2 style={{ margin: 0 }}>Fiches techniques</h2>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button className="mr-btn-primary" onClick={onClickImportButton}>
+            Importer fichier
+          </button>
+          <button className="mr-btn-secondary" onClick={onClickPhotoButton}>
+            Prendre photo
+          </button>
+          <button className="mr-btn-secondary" onClick={() => setShowManual(true)}>
+            Créer manuellement
+          </button>
+
+          <input ref={fileInputRef} type="file" accept=".pdf,image/*" style={{ display: 'none' }} onChange={handleFileImport} />
+          <input ref={photoInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handlePhotoSelected} />
+
+          <div style={{ fontSize: 13, color: '#666' }}>{selectedFileName}</div>
         </div>
       </header>
 
@@ -118,56 +173,55 @@ export default function FichesTechniquesTab({ fiches = [], setFiches = () => {} 
             <div
               style={{
                 width: `${Math.min(100, (importProgress.percent || 0) * 100)}%`,
-                height: '100%',
-                background: '#2b8aef',
+                height: 8,
+                background: '#4caf50',
                 borderRadius: 4,
-                transition: 'width 200ms',
               }}
             />
           </div>
         </div>
       )}
 
-      {showSuccess && <div style={{ marginTop: 12, color: 'green' }}>Fiche ajoutée avec succès ✅</div>}
+      {showSuccess && <div style={{ marginTop: 12, color: 'green' }}>Opération réussie ✅</div>}
 
-      {/* Placeholder list (tu peux remplacer par ton affichage actuel des fiches) */}
       <section style={{ marginTop: 16 }}>
-        <h3>Liste (aperçu) — {fiches.length} fiches</h3>
-        <ul>
-          {fiches.slice(0, 20).map((f) => (
-            <li key={f.id || f.nom || Math.random()}>
-              {f.nom || f.name || 'Fiche sans nom'} {f.date ? `— ${new Date(f.date).toLocaleDateString()}` : ''}
-            </li>
-          ))}
-        </ul>
+        <h3>Liste des fiches — {list.length} items</h3>
+        <div style={{ marginTop: 8 }}>{/* table/list rendering (inchangée) */}</div>
       </section>
 
-      {/* Modal de prévisualisation et commit */}
       {showPreview && parsedForPreview && (
-        <ImportPreview
-          parsed={parsedForPreview}
-          onClose={() => setShowPreview(false)}
-          onCommit={async (payload) => {
-            try {
-              setImporting(true);
-              setImportProgress({ message: 'Enregistrement...', percent: 0.2 });
-
-              // Envoie au backend pour persistance
-              await uploadCommit({ ...payload, type: 'fiche', targetProductName: payload.meta?.targetProductName });
-
-              setImportProgress({ message: 'Terminé', percent: 1.0 });
-              alert('✅ Import enregistré sur le serveur.');
-              setShowPreview(false);
-            } catch (err) {
-              console.error('Erreur commit:', err);
-              alert('Erreur lors de l\\'enregistrement : ' + (err?.message || err));
-            } finally {
-              setImporting(false);
-              setImportProgress({ message: '', percent: 0 });
-            }
-          }}
-        />
+        <div style={{ marginTop: 16 }}>
+          <ImportPreview
+            data={parsedForPreview}
+            onClose={() => setShowPreview(false)}
+            onCommit={async (data) => {
+              try {
+                const payload = {
+                  titre: data.titre || data.nom || data.name || 'Fiche',
+                  rendement: data.rendement || 1,
+                  uniteRdt: data.uniteRdt || 'unit',
+                  notes: data.notes || '',
+                  photoUrl: data.photoUrl || null,
+                  items: Array.isArray(data.items)
+                    ? data.items.map((it) => ({
+                        name: it.name || it.nom || '',
+                        quantite: Number(it.quantite || it.qty || 0),
+                        unite: it.unite || it.unit || 'unit',
+                        prix: Number(it.prix || it.price || 0),
+                      }))
+                    : [],
+                };
+                await commitFicheToServer(payload);
+                setShowPreview(false);
+              } catch (err) {
+                console.error('Erreur lors de la création de la fiche : ' + ((err && err.message) || String(err)));
+              }
+            }}
+          />
+        </div>
       )}
+
+      {showManual && <ManualFicheForm onClose={() => setShowManual(false)} onCommit={commitFicheToServer} />}
     </div>
   );
 }

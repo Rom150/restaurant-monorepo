@@ -1,11 +1,34 @@
+/* Updated ImportPreview: show/initialize values when parsed items have `nom` property;
+   and when editing the name we keep both `name` and `nom` in the object for compatibility. */
 import React, { useState } from 'react';
 
 export default function ImportPreview({ parsed, onClose, onCommit }) {
-  const [items, setItems] = useState(parsed?.items || []);
+  // Normalize initial items so inputs show values even if parsed objects use `nom`
+  const normalizeInitial = (items) => {
+    if (!Array.isArray(items)) return [];
+    return items.map(it => ({
+      ...it,
+      name: it.name ?? it.nom ?? '',
+      nom: it.nom ?? it.name ?? '',
+      quantite: it.quantite ?? it.quantity ?? 0,
+      unite: it.unite ?? it.unit ?? '',
+      prix: it.prix ?? it.price ?? 0,
+      confidence: it.confidence ?? it.confidenceScore ?? 0
+    }));
+  };
+
+  const [items, setItems] = useState(normalizeInitial((parsed && parsed.items) || []));
 
   const updateField = (index, field, value) => {
     const copy = [...items];
     copy[index] = { ...copy[index], [field]: value };
+    // keep both name and nom in sync when editing name
+    if (field === 'name') {
+      copy[index].nom = value;
+    }
+    if (field === 'nom') {
+      copy[index].name = value;
+    }
     setItems(copy);
   };
 
@@ -17,7 +40,7 @@ export default function ImportPreview({ parsed, onClose, onCommit }) {
     }}>
       <div style={{ width: 800, maxHeight: '80%', overflowY: 'auto', background: '#fff', padding: 20, borderRadius: 8 }}>
         <h3>Prévisualisation de l'import</h3>
-        <p><small>{parsed?.meta?.fileName} — {parsed?.meta?.lineCount} lignes</small></p>
+        <p><small>{(parsed && parsed.meta && parsed.meta.fileName)} — {(parsed && parsed.meta && parsed.meta.lineCount)}</small></p>
 
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -33,13 +56,13 @@ export default function ImportPreview({ parsed, onClose, onCommit }) {
             {items.map((it, i) => (
               <tr key={i} style={{ borderTop: '1px solid #eee' }}>
                 <td>
-                  <input value={it.name || ''} onChange={(e) => updateField(i, 'name', e.target.value)} style={{ width: '100%' }} />
+                  <input value={it.name ?? ''} onChange={(e) => updateField(i, 'name', e.target.value)} style={{ width: '100%' }} />
                 </td>
                 <td style={{ width: 100 }}>
                   <input value={it.quantite ?? ''} onChange={(e) => updateField(i, 'quantite', e.target.value)} style={{ width: '100%' }} />
                 </td>
                 <td style={{ width: 100 }}>
-                  <input value={it.unite || ''} onChange={(e) => updateField(i, 'unite', e.target.value)} style={{ width: '100%' }} />
+                  <input value={it.unite ?? ''} onChange={(e) => updateField(i, 'unite', e.target.value)} style={{ width: '100%' }} />
                 </td>
                 <td style={{ width: 120 }}>
                   <input value={it.prix ?? ''} onChange={(e) => updateField(i, 'prix', e.target.value)} style={{ width: '100%' }} />

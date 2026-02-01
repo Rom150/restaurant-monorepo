@@ -1,0 +1,114 @@
+import React, { useState } from 'react';
+
+export default function ManualFicheForm({ onClose, onCommit }) {
+  const [titre, setTitre] = useState('');
+  const [rendement, setRendement] = useState(1);
+  const [uniteRdt, setUniteRdt] = useState('unit');
+  const [notes, setNotes] = useState('');
+  const [items, setItems] = useState([{ name: '', quantite: 0, unite: 'unit', prix: 0 }]);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const addItem = () => setItems([...items, { name: '', quantite: 0, unite: 'unit', prix: 0 }]);
+  const updateItem = (i, field, value) => {
+    const copy = [...items];
+    copy[i] = { ...copy[i], [field]: value };
+    setItems(copy);
+  };
+  const removeItem = (i) => setItems(items.filter((_, idx) => idx !== i));
+
+  const handleCommit = async () => {
+    setSaving(true);
+    try {
+      let photoUrl = null;
+      if (photoFile) {
+        // Small images: data URL. If backend expects multipart, upload separately in commit handler.
+        const toDataUrl = (file) =>
+          new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result);
+            reader.onerror = rej;
+            reader.readAsDataURL(file);
+          });
+        photoUrl = await toDataUrl(photoFile);
+      }
+
+      const payload = {
+        titre: titre || 'Fiche manuelle',
+        rendement: Number(rendement) || 1,
+        uniteRdt: uniteRdt || 'unit',
+        notes: notes || '',
+        photoUrl,
+        items: Array.isArray(items)
+          ? items.map((it) => ({
+              name: it.name || '',
+              quantite: Number(it.quantite || 0),
+              unite: it.unite || 'unit',
+              prix: Number(it.prix || 0),
+            }))
+          : [],
+      };
+
+      await onCommit(payload); // onCommit expected to be commitFicheToServer
+      onClose();
+    } catch (e) {
+      console.error('Erreur commit manuel:', e);
+      console.error('Erreur en enregistrant la fiche : ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+      <div style={{ background: '#fff', padding: 20, width: 760, maxHeight: '90%', overflowY: 'auto', borderRadius: 8 }}>
+        <h3>Créer une fiche manuellement</h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 10 }}>
+          <input value={titre} onChange={(e) => setTitre(e.target.value)} placeholder="Titre" />
+          <div>
+            <input type="number" value={rendement} onChange={(e) => setRendement(e.target.value)} style={{ width: '100%' }} />
+            <select value={uniteRdt} onChange={(e) => setUniteRdt(e.target.value)} style={{ width: '100%', marginTop: 6 }}>
+              <option value="unit">unit</option>
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+            </select>
+          </div>
+        </div>
+
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" style={{ width: '100%', marginTop: 10 }} />
+
+        <div style={{ marginTop: 10 }}>
+          <strong>Items</strong>
+          {items.map((it, idx) => (
+            <div key={idx} style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <input placeholder="Nom" value={it.name} onChange={(e) => updateItem(idx, 'name', e.target.value)} style={{ flex: 2 }} />
+              <input type="number" placeholder="Quantité" value={it.quantite} onChange={(e) => updateItem(idx, 'quantite', e.target.value)} style={{ width: 90 }} />
+              <input placeholder="Unité" value={it.unite} onChange={(e) => updateItem(idx, 'unite', e.target.value)} style={{ width: 90 }} />
+              <input type="number" placeholder="Prix" value={it.prix} onChange={(e) => updateItem(idx, 'prix', e.target.value)} style={{ width: 110 }} />
+              <button onClick={() => removeItem(idx)}>Suppr</button>
+            </div>
+          ))}
+          <div style={{ marginTop: 8 }}>
+            <button onClick={addItem}>Ajouter un item</button>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <label>
+            Photo (optionnel): <input type="file" accept="image/*" onChange={(e) => setPhotoFile(e.target.files[0])} />
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+          <button onClick={onClose} disabled={saving}>
+            Annuler
+          </button>
+          <button onClick={handleCommit} disabled={saving}>
+            {saving ? 'Enregistrement...' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
