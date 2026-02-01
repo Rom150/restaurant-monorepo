@@ -100,13 +100,22 @@ app.post('/parse', upload.single('file'), async (req, res) => {
     }
 
     if (mimetype === 'application/pdf' || /\.pdf$/i.test(fileName)) {
-      const data = await pdfFunc(req.file.buffer);
-      const text = data && data.text ? String(data.text) : '';
-      const items = parseIngredientsFromText(text);
-      if (!items || items.length === 0) {
-        return res.status(200).json({ meta: { fileName, source: 'server', parsed: false }, items: [] });
+      try {
+        const data = await pdfFunc(req.file.buffer);
+        const text = data && data.text ? String(data.text) : '';
+        const items = parseIngredientsFromText(text);
+        if (!items || items.length === 0) {
+          return res.status(200).json({ meta: { fileName, source: 'server', parsed: false }, items: [] });
+        }
+        return res.status(200).json({ meta: { fileName, source: 'server' }, items });
+      } catch (pdfError) {
+        // PDF parsing failed (malformed PDF, etc) - return parsed:false so frontend can fallback
+        console.error('PDF parsing failed:', pdfError.message || pdfError);
+        return res.status(200).json({ 
+          meta: { fileName, source: 'server', parsed: false, error: pdfError.message || 'PDF parsing failed' }, 
+          items: [] 
+        });
       }
-      return res.status(200).json({ meta: { fileName, source: 'server' }, items });
     }
 
     // Non-PDF fallback (images etc)

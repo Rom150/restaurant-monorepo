@@ -1,10 +1,96 @@
-/* Updated ImportPreview: show/initialize values when parsed items have `nom` property;
-   and when editing the name we keep both `name` and `nom` in the object for compatibility. */
-import React, { useState } from 'react';
+/**
+ * ImportPreview - Component for importing and previewing parsed PDF/image files
+ * 
+ * - Receives a File prop and on mount attempts server parsing via parseFileWithServer
+ * - If server parsing returns parsed=true with items, calls onItems(items)
+ * - Otherwise fallbacks to client-side extractTextFromFile and passes results to onItems
+ * - Shows user-friendly messages for each stage
+ */
+import React, { useState, useEffect, useCallback } from 'react';
+import { parseFileWithServer } from '../utils/api';
+import { extractTextFromFile, parseIngredientsFromText } from '../utils/extractTextFromFile';
 
-export default function ImportPreview({ parsed, onClose, onCommit }) {
-  // Normalize initial items so inputs show values even if parsed objects use `nom`
-  const normalizeInitial = (items) => {
+const MIN_EXTRACTED_TEXT_LENGTH = 10;
+
+export default function ImportPreview({ file, onItems, onClose }) {
+  const [stage, setStage] = useState('uploading'); // uploading, server-parsed, client-fallback, error, preview
+  const [message, setMessage] = useState('');
+  const [items, setItems] = useState([]);
+  const [errorDetail, setErrorDetail] = useState('');
+
+  const attemptParsing = useCallback(async () => {
+    try {
+      // Stage 1: Upload and try server parsing
+      setStage('uploading');
+      setMessage('Uploading to server...');
+
+      const serverResult = await parseFileWithServer(file);
+
+      // Check if server parsing succeeded
+      if (serverResult.ok && serverResult.parsed && serverResult.items && serverResult.items.length > 0) {
+        // Server parsed successfully
+        setStage('server-parsed');
+        setMessage(`Server parsed ${serverResult.items.length} items successfully`);
+        setItems(normalizeItems(serverResult.items));
+        
+        // Notify parent with items
+        if (onItems) {
+          onItems(serverResult.items);
+        }
+        return;
+      }
+
+      // Stage 2: Server parsing failed or returned no items, fallback to client
+      console.log('Server parsing insufficient, falling back to client-side extraction');
+      setStage('client-fallback');
+      setMessage('Server parsing failed, trying client-side extraction...');
+
+      const extractedText = await extractTextFromFile(file);
+      if (!extractedText || extractedText.length < MIN_EXTRACTED_TEXT_LENGTH) {
+        setStage('error');
+        setMessage('Could not extract text from file');
+        setErrorDetail(serverResult.errorMessage || 'No text extracted');
+        return;
+      }
+
+      const clientParsed = parseIngredientsFromText(extractedText);
+      const clientItems = clientParsed.items || [];
+
+      if (clientItems.length === 0) {
+        setStage('error');
+        setMessage('No ingredients found in extracted text');
+        setErrorDetail('Try with a different file or check the file format');
+        return;
+      }
+
+      setStage('client-fallback');
+      setMessage(`Client extracted ${clientItems.length} items`);
+      setItems(normalizeItems(clientItems));
+
+      // Notify parent with items
+      if (onItems) {
+        onItems(clientItems);
+      }
+
+    } catch (error) {
+      console.error('Import error:', error);
+      setStage('error');
+      setMessage('Error during import');
+      setErrorDetail(error.message || String(error));
+    }
+  }, [file, onItems]);
+
+  useEffect(() => {
+    if (!file) {
+      setStage('error');
+      setMessage('No file provided');
+      return;
+    }
+
+    attemptParsing();
+  }, [file, attemptParsing]);
+
+  const normalizeItems = (items) => {
     if (!Array.isArray(items)) return [];
     return items.map(it => ({
       ...it,
@@ -16,8 +102,6 @@ export default function ImportPreview({ parsed, onClose, onCommit }) {
       confidence: it.confidence ?? it.confidenceScore ?? 0
     }));
   };
-
-  const [items, setItems] = useState(normalizeInitial((parsed && parsed.items) || []));
 
   const updateField = (index, field, value) => {
     const copy = [...items];
@@ -32,6 +116,52 @@ export default function ImportPreview({ parsed, onClose, onCommit }) {
     setItems(copy);
   };
 
+  const handleCommit = () => {
+    if (onItems) {
+      onItems(items);
+    }
+    if (onClose) {
+      onClose();
+    }
+  };
+
+  // Render status message
+  if (stage === 'uploading') {
+    return (
+      <div className="import-preview-modal" style={{
+        position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999
+      }}>
+        <div style={{ background: '#fff', padding: 40, borderRadius: 8, textAlign: 'center' }}>
+          <div className="spinner" style={{ marginBottom: 16 }}>⏳</div>
+          <div>{message}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render error
+  if (stage === 'error') {
+    return (
+      <div className="import-preview-modal" style={{
+        position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999
+      }}>
+        <div style={{ background: '#fff', padding: 40, borderRadius: 8, maxWidth: 500 }}>
+          <h3 style={{ color: '#d32f2f' }}>Import Error</h3>
+          <p>{message}</p>
+          {errorDetail && <p style={{ fontSize: '0.9em', color: '#666' }}>{errorDetail}</p>}
+          <div style={{ marginTop: 20 }}>
+            <button onClick={() => onClose && onClose()} style={{ padding: '8px 16px' }}>Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render preview with items
   return (
     <div className="import-preview-modal" style={{
       position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
@@ -40,7 +170,19 @@ export default function ImportPreview({ parsed, onClose, onCommit }) {
     }}>
       <div style={{ width: 800, maxHeight: '80%', overflowY: 'auto', background: '#fff', padding: 20, borderRadius: 8 }}>
         <h3>Prévisualisation de l'import</h3>
-        <p><small>{(parsed && parsed.meta && parsed.meta.fileName)} — {(parsed && parsed.meta && parsed.meta.lineCount)}</small></p>
+        <div style={{ marginBottom: 12 }}>
+          <span style={{ 
+            padding: '4px 8px', 
+            borderRadius: 4, 
+            fontSize: '0.85em',
+            background: stage === 'server-parsed' ? '#4caf50' : '#ff9800',
+            color: '#fff'
+          }}>
+            {stage === 'server-parsed' ? '✓ Server parsed' : '⚠ Client fallback'}
+          </span>
+          <span style={{ marginLeft: 12, color: '#666', fontSize: '0.9em' }}>{message}</span>
+        </div>
+        <p><small>{file?.name || 'Unknown file'} — {items.length} items</small></p>
 
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -77,7 +219,7 @@ export default function ImportPreview({ parsed, onClose, onCommit }) {
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
           <button onClick={() => onClose && onClose()} style={{ padding: '8px 12px' }}>Annuler</button>
-          <button onClick={() => onCommit && onCommit({ items, meta: parsed.meta })} style={{ padding: '8px 12px' }}>Valider et enregistrer</button>
+          <button onClick={handleCommit} style={{ padding: '8px 12px' }}>Valider et enregistrer</button>
         </div>
       </div>
     </div>
