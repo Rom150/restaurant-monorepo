@@ -35,3 +35,4 @@ docker-compose.yml
 # IDE
 .vscode/
 .idea/
+*.orig
