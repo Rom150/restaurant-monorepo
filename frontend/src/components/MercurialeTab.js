@@ -30,8 +30,10 @@ export default function MercurialeTab({ ingredients = [], setIngredients = () =>
 
   const handleItems = (items) => {
     // Convert items to canonical ingredient shape
+    // Use Date.now() * 1000 + index for more robust ID generation to avoid collisions
+    const baseTimestamp = Date.now() * 1000;
     const converted = items.map((it, i) => ({
-      id: Date.now() + i,
+      id: baseTimestamp + i,
       nom: it.nom || it.name || '',
       prix: Number(it.prix ?? it.price ?? 0) || 0,
       unite: it.unite || it.unit || 'unité',

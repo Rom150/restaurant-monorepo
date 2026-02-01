@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Test script for mock-parse-server
 # Posts a PDF file to the parse endpoint and displays results

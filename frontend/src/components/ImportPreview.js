@@ -6,9 +6,11 @@
  * - Otherwise fallbacks to client-side extractTextFromFile and passes results to onItems
  * - Shows user-friendly messages for each stage
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { parseFileWithServer } from '../utils/api';
 import { extractTextFromFile, parseIngredientsFromText } from '../utils/extractTextFromFile';
+
+const MIN_EXTRACTED_TEXT_LENGTH = 10;
 
 export default function ImportPreview({ file, onItems, onClose }) {
   const [stage, setStage] = useState('uploading'); // uploading, server-parsed, client-fallback, error, preview
@@ -16,18 +18,7 @@ export default function ImportPreview({ file, onItems, onClose }) {
   const [items, setItems] = useState([]);
   const [errorDetail, setErrorDetail] = useState('');
 
-  useEffect(() => {
-    if (!file) {
-      setStage('error');
-      setMessage('No file provided');
-      return;
-    }
-
-    attemptParsing();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file]);
-
-  const attemptParsing = async () => {
+  const attemptParsing = useCallback(async () => {
     try {
       // Stage 1: Upload and try server parsing
       setStage('uploading');
@@ -55,7 +46,7 @@ export default function ImportPreview({ file, onItems, onClose }) {
       setMessage('Server parsing failed, trying client-side extraction...');
 
       const extractedText = await extractTextFromFile(file);
-      if (!extractedText || extractedText.length < 10) {
+      if (!extractedText || extractedText.length < MIN_EXTRACTED_TEXT_LENGTH) {
         setStage('error');
         setMessage('Could not extract text from file');
         setErrorDetail(serverResult.errorMessage || 'No text extracted');
@@ -87,7 +78,17 @@ export default function ImportPreview({ file, onItems, onClose }) {
       setMessage('Error during import');
       setErrorDetail(error.message || String(error));
     }
-  };
+  }, [file, onItems]);
+
+  useEffect(() => {
+    if (!file) {
+      setStage('error');
+      setMessage('No file provided');
+      return;
+    }
+
+    attemptParsing();
+  }, [file, attemptParsing]);
 
   const normalizeItems = (items) => {
     if (!Array.isArray(items)) return [];
