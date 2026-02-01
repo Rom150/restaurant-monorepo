@@ -14,7 +14,6 @@ export default function ImportPreview({ file, onItems, onClose }) {
   const [stage, setStage] = useState('uploading'); // uploading, server-parsed, client-fallback, error, preview
   const [message, setMessage] = useState('');
   const [items, setItems] = useState([]);
-  const [parsed, setParsed] = useState(null);
   const [errorDetail, setErrorDetail] = useState('');
 
   useEffect(() => {
@@ -25,6 +24,7 @@ export default function ImportPreview({ file, onItems, onClose }) {
     }
 
     attemptParsing();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
   const attemptParsing = async () => {
@@ -40,7 +40,6 @@ export default function ImportPreview({ file, onItems, onClose }) {
         // Server parsed successfully
         setStage('server-parsed');
         setMessage(`Server parsed ${serverResult.items.length} items successfully`);
-        setParsed({ items: serverResult.items, meta: { ...serverResult.meta, source: 'server' } });
         setItems(normalizeItems(serverResult.items));
         
         // Notify parent with items
@@ -75,7 +74,6 @@ export default function ImportPreview({ file, onItems, onClose }) {
 
       setStage('client-fallback');
       setMessage(`Client extracted ${clientItems.length} items`);
-      setParsed({ items: clientItems, meta: { fileName: file.name, source: 'client-fallback' } });
       setItems(normalizeItems(clientItems));
 
       // Notify parent with items
