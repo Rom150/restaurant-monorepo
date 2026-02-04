@@ -72,3 +72,5 @@ cookies*.txt
 *.bak*
 .env
 node_modules/
+.secrets/
+test-vision.js
