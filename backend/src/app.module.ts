@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { ConfigModule } from '@nestjs/config';
 
 // modules que nous avons ajoutés
 import { FichesTechniquesModule } from './fiches-techniques/fiches-techniques.module';
@@ -13,6 +14,8 @@ import { UnitesModule } from './unites/unites.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+
     UploadModule,
     // Prisma en premier si d'autres modules en dépendent
     PrismaModule,
